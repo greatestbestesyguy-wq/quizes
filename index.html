@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MetroQuizes | Study Smarter</title>
+    <style>
+        :root {
+            --bg: #0a0a0c;
+            --card: #16161a;
+            --accent: #7c4dff;
+            --text: #ffffff;
+            --text-dim: #a0a0ab;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container { width: 100%; max-width: 600px; }
+
+        /* Glassmorphism Input Group */
+        .input-group {
+            background: var(--card);
+            padding: 20px;
+            border-radius: 16px;
+            border: 1px solid #2d2d35;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            margin-bottom: 20px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            background: #000;
+            border: 1px solid #3f3f46;
+            border-radius: 8px;
+            color: white;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        button:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        /* Flashcard Styling */
+        .card-list { display: grid; gap: 15px; margin-top: 20px; }
+        .quiz-card {
+            background: var(--card);
+            padding: 15px;
+            border-radius: 12px;
+            border-left: 4px solid var(--accent);
+        }
+
+        .term { font-weight: bold; color: var(--accent); margin-bottom: 5px; }
+        .def { color: var(--text-dim); font-size: 0.95rem; }
+
+        /* Saved Sets */
+        .saved-section { margin-top: 30px; width: 100%; }
+        .saved-item {
+            background: #1e1e24;
+            padding: 10px;
+            margin-bottom: 5px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            cursor: pointer;
+        }
+
+        /* Tutorial Overlay */
+        #tutorial {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .share-box {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-top: 10px;
+            background: #000;
+            padding: 5px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>MetroQuizes</h1>
+    
+    <div class="input-group">
+        <input type="text" id="quizUrl" placeholder="Paste Quizlet URL or Share Code">
+        <button onclick="fetchQuiz()">Fetch Quiz</button>
+        <div id="shareDisplay" class="share-box" style="display:none"></div>
+    </div>
+
+    <div id="status"></div>
+    <div class="card-list" id="cardList"></div>
+
+    <div class="saved-section">
+        <h3>Saved Quizzes</h3>
+        <div id="savedList"></div>
+    </div>
+</div>
+
+<div id="tutorial">
+    <div class="input-group">
+        <h2>Welcome to MetroQuizes! 🚀</h2>
+        <p>1. Paste any public Quizlet link.<br>
+           2. Hit Fetch to see terms instantly.<br>
+           3. Use the "Share Code" to send to friends!</p>
+        <button onclick="closeTutorial()">Got it!</button>
+    </div>
+</div>
+
+<script>
+    // 1. CHANGE THIS TO YOUR KOYEB URL
+    const API_URL = "http://wilful-ora-metroquizes-54f48c50.koyeb.app/scrape";
+
+    // Initialize Page
+    window.onload = () => {
+        if (!localStorage.getItem('tutorialDone')) {
+            document.getElementById('tutorial').style.display = 'flex';
+        }
+        renderSaved();
+        
+        // Check if URL has a code
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('code')) {
+            const encoded = urlParams.get('code');
+            document.getElementById('quizUrl').value = atob(encoded);
+            fetchQuiz();
+        }
+    };
+
+    function closeTutorial() {
+        localStorage.setItem('tutorialDone', 'true');
+        document.getElementById('tutorial').style.display = 'none';
+    }
+
+    async function fetchQuiz() {
+        const input = document.getElementById('quizUrl').value;
+        const status = document.getElementById('status');
+        const list = document.getElementById('cardList');
+        
+        if (!input) return;
+
+        status.innerText = "Searching Metro databases...";
+        list.innerHTML = "";
+
+        try {
+            const response = await fetch(`${API_URL}?url=${encodeURIComponent(input)}`);
+            const data = await response.json();
+
+            if (data.error) throw new Error(data.error);
+
+            // Save to LocalStorage
+            saveQuiz(input, data.length);
+
+            // Generate Share Code
+            const shareCode = btoa(input);
+            document.getElementById('shareDisplay').style.display = 'block';
+            document.getElementById('shareDisplay').innerText = `Share link: ${window.location.origin}${window.location.pathname}?code=${shareCode}`;
+
+            data.forEach(card => {
+                const div = document.createElement('div');
+                div.className = 'quiz-card';
+                div.innerHTML = `<div class="term">${card.term}</div><div class="def">${card.definition}</div>`;
+                list.appendChild(div);
+            });
+
+            status.innerText = `Success! Found ${data.length} cards.`;
+        } catch (err) {
+            status.innerText = "Error: " + err.message;
+        }
+    }
+
+    function saveQuiz(url, count) {
+        let saved = JSON.parse(localStorage.getItem('savedQuizzes') || '[]');
+        if (!saved.find(s => s.url === url)) {
+            saved.push({ url, count, date: new Date().toLocaleDateString() });
+            localStorage.setItem('savedQuizzes', JSON.stringify(saved));
+            renderSaved();
+        }
+    }
+
+    function renderSaved() {
+        const list = document.getElementById('savedList');
+        const saved = JSON.parse(localStorage.getItem('savedQuizzes') || '[]');
+        list.innerHTML = saved.map(s => `
+            <div class="saved-item" onclick="loadSaved('${s.url}')">
+                <span>${s.url.split('/')[4] || 'Quiz'} (${s.count} cards)</span>
+                <span style="color:var(--text-dim)">${s.date}</span>
+            </div>
+        `).join('');
+    }
+
+    function loadSaved(url) {
+        document.getElementById('quizUrl').value = url;
+        fetchQuiz();
+    }
+</script>
+
+</body>
+</html>
